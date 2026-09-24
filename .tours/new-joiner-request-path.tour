@@ -1,0 +1,95 @@
+{
+  "$schema": "https://aka.ms/codetour-schema",
+  "title": "新手走读：一个 tools/call 的生命周期",
+  "description": "从进程启动到工具执行，沿着一个 MCP 请求的真实执行路径，理解 mcp_server 的核心结构与安全设计。面向首次接触本仓库的工程师。",
+  "ref": "main",
+  "steps": [
+    {
+      "directory": "src",
+      "title": "0 · 源码地图",
+      "description": "Situation: 所有运行期代码都在 src/ 下，按职责分层。\nMechanism: core/=核心与会话状态机，protocol/=JSON-RPC 解析，transport/+listener/=多种传输入口，gateway/=唯一工具调度，registry/=工具表，tools/=内置工具实现。\nImplication: 任何请求都遵循「传输 → 协议 → 核心队列 → 网关 → 注册表 → 工具」这条单向链路。\nGotcha: 这是纯 C 项目，没有类，模块边界靠头文件 + `mcp_<module>_<action>` 命名约定划分。"
+    },
+    {
+      "file": "src/main/main.c",
+      "line": 90,
+      "title": "1 · 进程入口",
+      "description": "Situation: main() 是唯一入口，全部行为由环境变量驱动。\nMechanism: env_bool/env_str/env_uint 读取 MCP_ENABLE_STDIO/TCP/UDP/PIPE 等开关，决定启用哪些传输；然后初始化 libuv loop。\nImplication: 想改变服务监听方式不用改代码，只调环境变量。\nGotcha: 没有命令行参数解析——配置入口 100% 是环境变量。"
+    },
+    {
+      "file": "src/main/main.c",
+      "line": 118,
+      "title": "2 · 传输选择与关停语义",
+      "description": "Situation: 这里决定最终启用哪些传输，以及 EOF 是否触发关停。\nMechanism: 若全部关闭则回退到 stdio；只有纯 stdio 模式才在 EOF 时 shutdown（stdio_eof_shutdown）。\nImplication: TCP/UDP/pipe 模式下 stdin 关闭不会杀掉服务——这正是给 adapter 长连接用的。\nGotcha: 多个传输可同时启用，它们最终汇入同一个消息队列（见后续步骤）。"
+    },
+    {
+      "file": "src/core/server.c",
+      "line": 716,
+      "title": "3 · 核心装配",
+      "description": "Situation: mcp_server_init 把所有部件接线起来。\nMechanism: 创建 stdio/udp transport、uv_async（核心唤醒句柄）、in_flight 表，随后依次 registry → gateway → 注册内置工具。\nImplication: registry 和 gateway 在启动期就固定；工具集是编译期 + 启动期确定的，运行时不增删（plugin 是占位）。\nGotcha: core_async 是跨传输回调与核心逻辑之间的唯一桥梁——所有消息都通过它回到核心线程上下文。"
+    },
+    {
+      "file": "src/core/server.c",
+      "line": 588,
+      "title": "4 · 传输边界：收到一行",
+      "description": "Situation: stdio 收到一行数据后的第一站（tcp/udp 有对应的 framed_on_message/udp_on_datagram，结构相同）。\nMechanism: mcp_jsonrpc_parse_line 解析成 message，并记录 reply_target（stdio/stream/udp_peer），告诉核心「答复该发回哪里」。\nImplication: reply_target 是多传输共存的关键——核心逻辑完全不关心消息从哪来。\nGotcha: 解析失败直接就地回错误，不入队。"
+    },
+    {
+      "file": "src/core/server.c",
+      "line": 231,
+      "title": "5 · 单一消息队列",
+      "description": "Situation: queue_message 把消息挂到链表尾，并 uv_async_send 唤醒核心。\nMechanism: 不论来自哪个传输，都进同一个 FIFO 队列。\nImplication: 这是本服务的并发模型核心——所有请求被串行化，避免了跨会话的数据竞争。\nGotcha: 没有线程池；libuv 单线程事件循环 + 串行队列就是全部「并发」设计。"
+    },
+    {
+      "file": "src/core/server.c",
+      "line": 570,
+      "title": "6 · 串行派发",
+      "description": "Situation: core_async_cb 被 uv_async 唤醒后排空队列。\nMechanism: 逐条出队，按 request / notification 分流到 handle_request / handle_notification，处理完检查 maybe_shutdown。\nImplication: 一次唤醒尽可能清空队列，减少 async 调度开销。\nGotcha: 整个 while 循环在事件循环线程上同步执行——单个工具若阻塞，会卡住所有其它请求。"
+    },
+    {
+      "file": "src/core/server.c",
+      "line": 417,
+      "title": "7 · 请求处理总入口",
+      "description": "Situation: handle_request 是所有 JSON-RPC 方法的分发中心。\nMechanism: 先按 reply_target 找/建会话，过 gate_allows_method 门控，再依次匹配 ping / initialize / tools/list / tools/call / resources|prompts。\nImplication: 这是阅读「服务支持哪些方法」的唯一权威位置。\nGotcha: 每个 reply_target 有独立会话——TCP 每个 peer 一个 session，stdio 共用一个。"
+    },
+    {
+      "file": "src/core/server.c",
+      "line": 202,
+      "title": "8 · 会话状态机门控",
+      "description": "Situation: gate_allows_method 决定当前会话状态下哪些方法可调。\nMechanism: ping 永远放行；initialize 仅在 NOT_INITIALIZED 时放行；其余方法必须 INITIALIZED。严格模式下还需客户端先发 notifications/initialized。\nImplication: 这实现了 MCP 握手协议——未握手完成不能调工具。\nGotcha: 状态推进分散在 handle_request(initialize) 与 handle_notification(initialized) 两处，要一起看。"
+    },
+    {
+      "file": "src/core/server.c",
+      "line": 467,
+      "title": "9 · tools/call 与快照可见性",
+      "description": "Situation: tools/call 分支——核心安全检查在这里。\nMechanism: 取出 name/arguments，确保会话已有 tool_snapshot（来自 tools/list），并校验目标工具在快照中可见，否则拒绝；通过后登记 in_flight 再交给网关。\nImplication: 「先 list 后 call」被强制——客户端不能调用它没列举过的工具。\nGotcha: in_flight 登记是为了支持 notifications/cancelled 取消（见 handle_cancelled）。"
+    },
+    {
+      "file": "src/gateway/gateway.c",
+      "line": 58,
+      "title": "10 · 网关：唯一执行路径",
+      "description": "Situation: mcp_gateway_call 是所有工具（含本地内置）的唯一执行入口。\nMechanism: 再次校验快照可见性 → registry 查描述符 → 检查 route 必须是 LOCAL_BUILTIN 且有 handler → 调 handler，并累加 calls_total/local_calls/rejected_calls 统计。\nImplication: 统一的执行点为将来的 embedded/remote/plugin 路由预留了同一处策略与审计位置（见 architecture.md）。\nGotcha: 非 LOCAL_BUILTIN 的路由当前一律返回「未实现」——描述符可声明，但只有内置工具能真正执行。"
+    },
+    {
+      "file": "src/tools/builtin_tools.c",
+      "line": 268,
+      "title": "11 · 内置工具注册",
+      "description": "Situation: mcp_register_builtin_tools 是所有可用工具的清单。\nMechanism: 每个工具用 register_tool 填 descriptor（名称、schema、风险等级 L0~L4、权限、超时、handler），由 MCP_HAS_TOOL_* 宏编译期裁剪。\nImplication: 加新工具 = 在此 register_tool + 写一个 handler 函数，是最常见的扩展点。\nGotcha: registry 通过 descriptor_copy 深拷贝字符串/schema，但 handler 是函数指针——工具逻辑始终在本二进制内。"
+    },
+    {
+      "file": "src/tools/shell_exec.c",
+      "line": 596,
+      "title": "12 · 安全要点：shell_exec 默认禁用",
+      "description": "Situation: system.shell_exec 是唯一的 L4 高危工具（能跑主机命令）。\nMechanism: 配置默认 enabled=false（config_defaults），从 config/tools/shell_exec.json 加载后，再由 MCP_ENABLE_SHELL_EXEC 环境变量做最终覆盖；带 CPU/内存/进程数/超时/输出截断限制与审计日志。\nImplication: 默认安全——不显式开启绝不会执行任何命令。\nGotcha: 即便注册了该工具，运行时是否真正放行取决于这一行的 env 覆盖，而非仅 JSON 配置。"
+    },
+    {
+      "file": "src/listener/framed_listener.c",
+      "line": 59,
+      "title": "13 · 彩蛋：TCP 帧协议",
+      "description": "Situation: TCP/pipe 不像 stdio 用换行分隔，而是用长度前缀帧。\nMechanism: decode_be32/encode_be32 处理 4 字节大端长度头，后接 JSON body——adapter 与 server 之间就用这个协议。\nImplication: 想自己写客户端直连（不经 adapter）时，必须按「4字节大端长度 + JSON」打包。\nGotcha: stdio 走按行 JSON，TCP 走 framed，两者协议不同但 body 都是同一套 JSON-RPC。"
+    },
+    {
+      "title": "14 · 你现在能做什么",
+      "description": "你已经能端到端追踪一个请求：传输接收 → 解析 → 单队列串行 → 会话门控 → 快照校验 → 网关 → 注册表 → 工具 handler → 按 reply_target 回包。\n下一步建议：(1) 加工具就照步骤 11 的 register_tool 模式；(2) 调传输/平台开关看 cmake/MCP*.cmake 与 config/*_defconfig.cmake；(3) 验证行为跑 tests/*.py（CTest）。"
+    }
+  ]
+}
