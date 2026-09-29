@@ -651,18 +651,18 @@ MVP 验收场景：
 
 ## 17. 可行性风险与控制措施
 
-| 风险 | 为什么会发生 | MVP 控制措施 | 后续扩展点 |
-| --- | --- | --- | --- |
-| 多客户端 request ID 冲突 | 当前 in-flight 只用 client ID key | 阶段 0 引入 request token | 分布式 trace/request identity |
-| catalog 半更新 | 当前 registry 是逐项 register/unregister | source-generation 构建后原子交换 | TTL、subscription、跨实例 catalog |
-| route binding 悬空 | registry 浅拷贝 handler_data | binding 由 generation 持有，drain 后释放 | 引用计数/epoch reclamation |
-| 子进程协议污染 | 外部 server 把日志写 stdout | stdout 仅协议，stderr 单独限流采集 | 结构化 OpenTelemetry |
-| 上游卡死 | 无通用 gateway timeout | absolute deadline + bounded pending | 熔断、配额、负载均衡 |
-| 重复副作用 | 断线后未知是否已执行 | MVP 零自动重试 | 仅幂等且结果明确时有限重试 |
-| shutdown 卡住 | pending 永不完成 | drain deadline，超时统一完成错误 | 持久 task/恢复语义 |
-| 协议 revision 漂移 | 当前项目固定 2024-11-05，官方协议持续演进 | 配置固定并拒绝不兼容 revision | 独立 lifecycle codec/negotiation |
-| HTTP 安全复杂度 | TLS、redirect、DNS、代理均可引入漏洞 | MVP 不做 HTTP | 使用成熟库并逐项安全测试 |
-| 旧 snapshot 与安全撤权 | snapshot 是历史可见性 | 每次执行重新检查实时 route/policy | policy generation 与审计 |
+| 风险                     | 为什么会发生                              | MVP 控制措施                             | 后续扩展点                        |
+| ------------------------ | ----------------------------------------- | ---------------------------------------- | --------------------------------- |
+| 多客户端 request ID 冲突 | 当前 in-flight 只用 client ID key         | 阶段 0 引入 request token                | 分布式 trace/request identity     |
+| catalog 半更新           | 当前 registry 是逐项 register/unregister  | source-generation 构建后原子交换         | TTL、subscription、跨实例 catalog |
+| route binding 悬空       | registry 浅拷贝 handler_data              | binding 由 generation 持有，drain 后释放 | 引用计数/epoch reclamation        |
+| 子进程协议污染           | 外部 server 把日志写 stdout               | stdout 仅协议，stderr 单独限流采集       | 结构化 OpenTelemetry              |
+| 上游卡死                 | 无通用 gateway timeout                    | absolute deadline + bounded pending      | 熔断、配额、负载均衡              |
+| 重复副作用               | 断线后未知是否已执行                      | MVP 零自动重试                           | 仅幂等且结果明确时有限重试        |
+| shutdown 卡住            | pending 永不完成                          | drain deadline，超时统一完成错误         | 持久 task/恢复语义                |
+| 协议 revision 漂移       | 当前项目固定 2024-11-05，官方协议持续演进 | 配置固定并拒绝不兼容 revision            | 独立 lifecycle codec/negotiation  |
+| HTTP 安全复杂度          | TLS、redirect、DNS、代理均可引入漏洞      | MVP 不做 HTTP                            | 使用成熟库并逐项安全测试          |
+| 旧 snapshot 与安全撤权   | snapshot 是历史可见性                     | 每次执行重新检查实时 route/policy        | policy generation 与审计          |
 
 总体可行性判断：
 

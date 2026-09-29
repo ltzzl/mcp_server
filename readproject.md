@@ -610,14 +610,14 @@ pipe 与 TCP 共用 `mcp_framed_listener`，所以二者具有相同的：
 
 差异主要在建立连接的位置：
 
-| 对比项 | TCP | pipe |
-| --- | --- | --- |
-| 绑定目标 | IP + port | 本地 pipe/socket 路径 |
-| libuv server handle | `uv_tcp_t` | `uv_pipe_t` |
-| 接受连接后的 handle | `uv_tcp_t` | `uv_pipe_t` |
-| network address allowlist | 接受后检查 | 不走 IP 地址检查 |
-| 消息 framing | 4 字节大端长度 | 4 字节大端长度 |
-| core 回调 | `framed_on_message` | `framed_on_message` |
+| 对比项                    | TCP                   | pipe                  |
+| ------------------------- | --------------------- | --------------------- |
+| 绑定目标                  | IP + port             | 本地 pipe/socket 路径 |
+| libuv server handle       | `uv_tcp_t`          | `uv_pipe_t`         |
+| 接受连接后的 handle       | `uv_tcp_t`          | `uv_pipe_t`         |
+| network address allowlist | 接受后检查            | 不走 IP 地址检查      |
+| 消息 framing              | 4 字节大端长度        | 4 字节大端长度        |
+| core 回调                 | `framed_on_message` | `framed_on_message` |
 
 因此 TCP 和 pipe 的差异主要停留在 listener 的连接建立层；一旦拿到完整 payload，后续 core 数据生命周期相同。
 
@@ -625,12 +625,12 @@ pipe 与 TCP 共用 `mcp_framed_listener`，所以二者具有相同的：
 
 三种 reply transport 覆盖了四个入口：
 
-| 输入入口 | reply transport | 身份/返回依据 | session 归属 |
-| --- | --- | --- | --- |
-| stdio | `MCP_REPLY_STDIO` | 固定 stdout | 唯一 `stdio_session` |
-| UDP | `MCP_REPLY_UDP` | IPv4/IPv6 来源地址和端口 | 按 UDP peer 匹配 |
-| TCP | `MCP_REPLY_STREAM` | 当前 framed connection | 按 connection 匹配 |
-| pipe | `MCP_REPLY_STREAM` | 当前 framed connection | 按 connection 匹配 |
+| 输入入口 | reply transport      | 身份/返回依据            | session 归属          |
+| -------- | -------------------- | ------------------------ | --------------------- |
+| stdio    | `MCP_REPLY_STDIO`  | 固定 stdout              | 唯一`stdio_session` |
+| UDP      | `MCP_REPLY_UDP`    | IPv4/IPv6 来源地址和端口 | 按 UDP peer 匹配      |
+| TCP      | `MCP_REPLY_STREAM` | 当前 framed connection   | 按 connection 匹配    |
+| pipe     | `MCP_REPLY_STREAM` | 当前 framed connection   | 按 connection 匹配    |
 
 `reply_targets_equal()` 体现了这种身份规则：stdio 永远与 stdio 相等；stream 比较 connection 指针；UDP 比较同地址族下的 socket address 内容。
 
@@ -674,19 +674,19 @@ transport/listener 临时接收缓冲
 
 ### 3.10 错误发生在哪一层
 
-| 错误/事件 | 发现模块 | 当前处理方式 |
-| --- | --- | --- |
-| stdio 行过长 | stdio transport | 停止输入并触发 exit 流程 |
-| stdio EOF/读取失败 | stdio transport | 触发 `stdio_on_exit`，按配置关闭进程或仅 stdio |
-| UDP 来源不允许 | core + network policy | 静默丢弃 |
-| UDP 接收/发送错误 | UDP transport | 调用 `udp_on_error`；当前 core callback 不继续处理 |
-| TCP 来源不允许 | framed listener + core policy callback | 关闭刚接受的连接 |
-| TCP/pipe frame 长度为 0 或过大 | framed listener | 关闭该 connection |
-| TCP/pipe 读写失败 | framed listener | 关闭该 connection |
-| JSON 语法错误 | protocol | 构造 `-32700 Parse error`，按原 reply target 返回 |
-| JSON-RPC 结构无效 | protocol | 构造 `-32600 Invalid Request`，按原 reply target 返回 |
-| message node 分配失败 | core | 销毁已解析 message；当前实现不发送额外错误 |
-| stream 连接关闭 | framed listener/core | 删除对应 session 和 snapshot |
+| 错误/事件                      | 发现模块                               | 当前处理方式                                           |
+| ------------------------------ | -------------------------------------- | ------------------------------------------------------ |
+| stdio 行过长                   | stdio transport                        | 停止输入并触发 exit 流程                               |
+| stdio EOF/读取失败             | stdio transport                        | 触发`stdio_on_exit`，按配置关闭进程或仅 stdio        |
+| UDP 来源不允许                 | core + network policy                  | 静默丢弃                                               |
+| UDP 接收/发送错误              | UDP transport                          | 调用`udp_on_error`；当前 core callback 不继续处理    |
+| TCP 来源不允许                 | framed listener + core policy callback | 关闭刚接受的连接                                       |
+| TCP/pipe frame 长度为 0 或过大 | framed listener                        | 关闭该 connection                                      |
+| TCP/pipe 读写失败              | framed listener                        | 关闭该 connection                                      |
+| JSON 语法错误                  | protocol                               | 构造`-32700 Parse error`，按原 reply target 返回     |
+| JSON-RPC 结构无效              | protocol                               | 构造`-32600 Invalid Request`，按原 reply target 返回 |
+| message node 分配失败          | core                                   | 销毁已解析 message；当前实现不发送额外错误             |
+| stream 连接关闭                | framed listener/core                   | 删除对应 session 和 snapshot                           |
 
 这张表也展示了模块责任：消息边界错误由 transport/listener 处理；JSON-RPC 形态错误由 protocol 表达；来源准入由 network policy 决定；业务方法和 session 错误则在下一阶段由 core 处理。
 
@@ -803,13 +803,13 @@ process_rx → read_u32_be / rx_consume
 
 后续更新阅读状态时，可以逐项记录：
 
-- [ ] 我能解释为什么 stdio 按换行切分，而 TCP/pipe 必须使用长度前缀。
-- [ ] 我能解释 UDP 为什么不需要接收缓冲重组，但必须保存来源地址。
+- [X] 我能解释为什么 stdio 按换行切分，而 TCP/pipe 必须使用长度前缀。
+- [X] 我能解释 UDP 为什么不需要接收缓冲重组，但必须保存来源地址。
 - [ ] 我能说出四个入口分别使用哪一种 reply target。
 - [ ] 我能解释原始接收缓冲释放后，排队消息为什么仍然有效。
-- [ ] 我能解释为什么入口 callback 只解析和排队，不直接调用工具。
-- [ ] 我能区分“非法 frame 长度”“非法 JSON”“来源地址不允许”三种错误由谁处理。
-- [ ] 我能解释 TCP/pipe 普通 JSON-RPC 与 peer 二进制帧如何在同一 framed listener 上分流。
+- [X] 我能解释为什么入口 callback 只解析和排队，不直接调用工具。
+- [X] 我能区分“非法 frame 长度”“非法 JSON”“来源地址不允许”三种错误由谁处理。
+- [X] 我能解释 TCP/pipe 普通 JSON-RPC 与 peer 二进制帧如何在同一 framed listener 上分流。
 
 全部理解后，可把本节状态更新为“已阅读”，并在下面记录自己的理解。
 
@@ -933,16 +933,16 @@ MCP_SESSION_INITIALIZED
 
 `handle_request()` 当前直接识别：
 
-| method | 行为 |
-| --- | --- |
-| `ping` | 返回空 object |
-| `initialize` | 返回能力并推进 session |
-| `tools/list` | 刷新该 session 的工具快照 |
-| `tools/call` | 进入第 6 步的调用生命周期 |
-| `resources/list` | 返回空 resources 数组 |
-| `resources/templates/list` | 返回空 resourceTemplates 数组 |
-| `prompts/list` | 返回空 prompts 数组 |
-| 其他 method | JSON-RPC `-32601 Method not found` |
+| method                       | 行为                                |
+| ---------------------------- | ----------------------------------- |
+| `ping`                     | 返回空 object                       |
+| `initialize`               | 返回能力并推进 session              |
+| `tools/list`               | 刷新该 session 的工具快照           |
+| `tools/call`               | 进入第 6 步的调用生命周期           |
+| `resources/list`           | 返回空 resources 数组               |
+| `resources/templates/list` | 返回空 resourceTemplates 数组       |
+| `prompts/list`             | 返回空 prompts 数组                 |
+| 其他 method                  | JSON-RPC`-32601 Method not found` |
 
 capabilities 中目前声明 resources 和 prompts，但 list 结果为空；这表示协议入口存在，不代表项目已经实现资源或提示内容。
 
@@ -1571,8 +1571,8 @@ CodeGraph 可确认 host 注册进入 registry、异步完成进入 core；ABI f
 discovery 启动后创建 UDP socket、announce timer 和 heartbeat timer。它向以下目标发送 announce/heartbeat：
 
 - network policy 中配置的 peers；
--显式 hosts；
--允许时的广播地址。
+  -显式 hosts；
+  -允许时的广播地址。
 
 收到合法 discovery packet 后，根据 instance/地址/port 更新 peer 记录。peer 拥有 server ID、在线状态、最近 heartbeat、TCP connection、tools cache 和 generation。
 
@@ -1795,12 +1795,12 @@ plugin manager close 会禁止新的异步完成入队并关闭 complete async�
 
 ### 9.7 错误传播的四个层次
 
-| 层次 | 例子 | 对客户端表现 |
-| --- | --- | --- |
-| framing/transport | frame 过大、TCP read 失败 | 关闭连接或停止入口，可能无 JSON 响应 |
-| JSON-RPC protocol | parse error、invalid request、method not found | JSON-RPC error object |
-| MCP/tool | 工具不可见、插件失败、远端超时 | JSON-RPC result 中 `isError=true` |
-| process/lifecycle | 初始化失败、资源关闭失败 | stderr/进程退出；不一定有客户端响应 |
+| 层次              | 例子                                           | 对客户端表现                         |
+| ----------------- | ---------------------------------------------- | ------------------------------------ |
+| framing/transport | frame 过大、TCP read 失败                      | 关闭连接或停止入口，可能无 JSON 响应 |
+| JSON-RPC protocol | parse error、invalid request、method not found | JSON-RPC error object                |
+| MCP/tool          | 工具不可见、插件失败、远端超时                 | JSON-RPC result 中`isError=true`   |
+| process/lifecycle | 初始化失败、资源关闭失败                       | stderr/进程退出；不一定有客户端响应  |
 
 理解错误属于哪层，才能判断应构造 JSON-RPC error、tool result，还是关闭 transport。
 
@@ -1941,36 +1941,36 @@ JSON-RPC 负责启动和最终结果，MFT1 数据面负责大文件。这是“
 
 ### 10.5 按问题寻找模块
 
-| 想回答的问题 | 首先阅读 |
-| --- | --- |
-| 服务为什么启动了某个入口 | `src/main/main.c` |
-| 字节怎样变成一条消息 | `src/transport/*`, `src/listener/framed_listener.c` |
-| JSON-RPC 为什么被拒绝 | `src/protocol/jsonrpc.c` |
-| 当前客户端是否已初始化 | `src/core/server.c`, `server_internal.h` |
-| 工具为何看不见 | session snapshot + `tool_registry.c` |
-| 工具为何走某个执行路径 | `src/gateway/gateway.c` |
-| built-in 做了什么 | `src/tools/*` |
-| plugin 如何注册和完成 | `src/plugin/plugin_manager.c`, ABI header |
-| 远端节点为何不可用 | `src/discovery/server_discovery.c` |
-| 二进制扩展帧到哪里 | `src/transport/peer_transport.c` |
-| 文件传输为何暂停/重试 | `file_transfer_plugin.c` |
-| 进程为何不能退出 | core in-flight、各 handle close callback、shell/plugin/discovery pending |
+| 想回答的问题             | 首先阅读                                                                 |
+| ------------------------ | ------------------------------------------------------------------------ |
+| 服务为什么启动了某个入口 | `src/main/main.c`                                                      |
+| 字节怎样变成一条消息     | `src/transport/*`, `src/listener/framed_listener.c`                  |
+| JSON-RPC 为什么被拒绝    | `src/protocol/jsonrpc.c`                                               |
+| 当前客户端是否已初始化   | `src/core/server.c`, `server_internal.h`                             |
+| 工具为何看不见           | session snapshot +`tool_registry.c`                                    |
+| 工具为何走某个执行路径   | `src/gateway/gateway.c`                                                |
+| built-in 做了什么        | `src/tools/*`                                                          |
+| plugin 如何注册和完成    | `src/plugin/plugin_manager.c`, ABI header                              |
+| 远端节点为何不可用       | `src/discovery/server_discovery.c`                                     |
+| 二进制扩展帧到哪里       | `src/transport/peer_transport.c`                                       |
+| 文件传输为何暂停/重试    | `file_transfer_plugin.c`                                               |
+| 进程为何不能退出         | core in-flight、各 handle close callback、shell/plugin/discovery pending |
 
 ### 10.6 各类状态的最终归属
 
-| 状态 | 所有者 | 生命周期 |
-| --- | --- | --- |
-| 启动配置 | main/server | 进程级 |
-| event loop | main | 进程级 |
-| registry descriptor | registry | 注册到注销/进程结束 |
-| session state/snapshot | core session | 输入通道/peer session 级 |
-| message node | core queue | 单次排队处理 |
-| in-flight entry | core | 一次未完成调用 |
-| plugin pending call | plugin manager | plugin 异步调用 |
-| discovery pending proxy | discovery | 一次远端代理 |
-| peer capability | peer transport | peer 连接期 |
-| file transfer context | MFT1 plugin | 一次传输 |
-| shell job | shell job store | job + retention 时间 |
+| 状态                    | 所有者          | 生命周期                 |
+| ----------------------- | --------------- | ------------------------ |
+| 启动配置                | main/server     | 进程级                   |
+| event loop              | main            | 进程级                   |
+| registry descriptor     | registry        | 注册到注销/进程结束      |
+| session state/snapshot  | core session    | 输入通道/peer session 级 |
+| message node            | core queue      | 单次排队处理             |
+| in-flight entry         | core            | 一次未完成调用           |
+| plugin pending call     | plugin manager  | plugin 异步调用          |
+| discovery pending proxy | discovery       | 一次远端代理             |
+| peer capability         | peer transport  | peer 连接期              |
+| file transfer context   | MFT1 plugin     | 一次传输                 |
+| shell job               | shell job store | job + retention 时间     |
 
 ### 10.7 当前已经实现与尚未实现
 
